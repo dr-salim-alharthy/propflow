@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PropFlow</title>
+<script>
+// ═══════════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════════
+const SUPA_URL = 'https://uiaapaudfwpjjuglvgpj.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpYWFwYXVkZndwamp1Z2x2Z3BqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4MjE0MTEsImV4cCI6MjA4NzM5NzQxMX0.uvOBLyTisZJ0wbNSHKGmzP_s57V8jN3aSrKg2iVa21Y';
+
+const supa = {
+  async req(method, path, body=null) {
+    const opts = {
+      method,
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': method==='POST' ? 'return=representation,resolution=merge-duplicates' : ''
+      }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(SUPA_URL + '/rest/v1/' + path, opts);
+    if (!r.ok) { const e=await r.text(); console.error('Supabase error:', e); return null; }
+    const txt = await r.text();
+    return txt ? JSON.parse(txt) : null;
+  },
+  get:    (path)       => supa.req('GET',    path),
+  post:   (path, body) => supa.req('POST',   path, body),
+  patch:  (path, body) => supa.req('PATCH',  path, body),
+  delete: (path)       => supa.req('DELETE', path),
+};
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --ink: #0F172A;
+  --paper: #F8FAFC;
+  --surface: #FFFFFF;
+  --border: #E2E8F0;
+  --muted: #94A3B8;
+  --icon: #374151;
+  --icon-muted: #9CA3AF;
+  --blue: #2563EB;
+  --blue-lt: #EFF6FF;
+  --green: #059669;
+  --green-lt: #ECFDF5;
+  --amber: #D97706;
+  --amber-lt: #FFFBEB;
+  --red: #DC2626;
+  --red-lt: #FEF2F2;
+  --purple: #7C3AED;
+  --purple-lt: #F5F3FF;
+  --r: 14px; --rs: 10px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: 'IBM Plex Sans Arabic', sans-serif;
+  background: #181818;
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh; direction: rtl;
+}
+
+.shell {
+  width: 393px; height: 852px; background: #0A0A0A;
+  border-radius: 52px; padding: 14px;
+  box-shadow: 0 48px 120px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.07);
+  position: relative; overflow: hidden; flex-shrink: 0;
+}
+.island {
+  width: 126px; height: 34px; background: #0A0A0A;
+  border-radius: 20px; margin: 0 auto 6px; position: relative; z-index: 10;
+}
+.screen {
+  background: var(--paper); border-radius: 40px;
+  height: 790px; overflow: hidden; position: relative;
+}
+
+/* VIEWS */
+.view {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+  background: var(--paper); padding-bottom: 78px;
+  transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+  -webkit-overflow-scrolling: touch;
+}
+.view.hidden { transform: translateX(-20px); opacity: 0; pointer-events: none; }
+.view.hidden.from-right { transform: translateX(20px); }
+.view::-webkit-scrollbar { display: none; }
+
+/* STATUS BAR */
+.sbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 22px 6px; font-size: 13px; font-weight: 600;
+  background: var(--surface); position: sticky; top: 0; z-index: 50;
+}
+.sbar-icons { display: flex; gap: 6px; align-items: center; }
+
+/* NAV BAR */
+.nav {
+  position: absolute; bottom: 0; width: 100%;
+  background: rgba(255,255,255,.97); backdrop-filter: blur(24px);
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: space-around;
+  padding: 10px 4px 20px; z-index: 100;
+}
+.nb {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: none; background: none; cursor: pointer; padding: 4px 12px;
+  font-family: inherit; transition: transform .1s;
+}
+.nb:active { transform: scale(.88); }
+.nb svg { width: 24px; height: 24px; stroke: var(--icon-muted); stroke-width: 1.6; fill: none; transition: stroke .15s; }
+.nb.on svg { stroke: var(--blue); }
+.nb-label { font-size: 9px; font-weight: 600; color: var(--muted); transition: color .15s; }
+.nb.on .nb-label { color: var(--blue); }
+
+/* SVG icon helper */
+svg.ico { fill: none; stroke: var(--icon); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+svg.ico-sm { width: 16px; height: 16px; }
+svg.ico-md { width: 20px; height: 20px; }
+svg.ico-lg { width: 24px; height: 24px; }
+
+/* Unit type icon containers */
+.unit-ico {
+  width: 42px; height: 42px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.unit-ico svg { width: 22px; height: 22px; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ui-apt    { background: var(--blue-lt);   } .ui-apt    svg { stroke: var(--blue);   }
+.ui-villa  { background: var(--green-lt);  } .ui-villa  svg { stroke: var(--green);  }
+.ui-shop   { background: var(--amber-lt);  } .ui-shop   svg { stroke: var(--amber);  }
+.ui-office { background: var(--purple-lt); } .ui-office svg { stroke: var(--purple); }
+
+/* SHARED */
+.card { background: var(--surface); border-radius: var(--r); border: 1.5px solid var(--border); overflow: hidden; }
+.tbar { padding: 12px 18px 8px; display: flex; justify-content: space-between; align-items: center; }
+.ttitle { font-size: 22px; font-weight: 800; letter-spacing: -.5px; }
+.btn { display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; border: none; font-family: inherit; font-weight: 700; transition: transform .1s, opacity .1s; }
+.btn:active { transform: scale(.95); opacity: .85; }
+.btn-blue  { background: var(--blue);  color: #fff; padding: 13px 20px; border-radius: var(--rs); font-size: 15px; }
+.btn-green { background: var(--green); color: #fff; padding: 13px 20px; border-radius: var(--rs); font-size: 15px; }
+.btn-ghost { background: var(--blue-lt); color: var(--blue); padding: 13px 20px; border-radius: var(--rs); font-size: 14px; }
+.btn-sm    { background: var(--blue); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; }
+.btn-sm-amber { background: var(--amber); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; }
+.fi { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--rs); padding: 11px 14px; font-size: 15px; font-family: inherit; color: var(--ink); outline: none; transition: border-color .15s; }
+.fi:focus { border-color: var(--blue); }
+.fi::placeholder { color: var(--muted); }
+.fl { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; letter-spacing: .5px; text-transform: uppercase; }
+.fg { margin-bottom: 12px; }
+.li { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
+.li:last-child { border-bottom: none; }
+.li:active { background: var(--paper); }
+.chip { padding: 8px 14px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 600; background: var(--surface); color: var(--ink); cursor: pointer; transition: all .15s; font-family: inherit; }
+.chip.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+.chip:active { transform: scale(.95); }
+.ftab { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; border: 1.5px solid var(--border); background: var(--surface); color: var(--muted); transition: all .15s; font-family: inherit; }
+.ftab.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+.sec-h { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px 7px; }
+.sec-ht { font-size: 15px; font-weight: 800; }
+.sec-hl { font-size: 12px; color: var(--blue); font-weight: 700; cursor: pointer; }
+.stag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.hero { margin: 0 14px 14px; background: var(--blue); border-radius: 18px; padding: 20px; color: #fff; }
+.srow { display: flex; gap: 10px; padding: 0 14px 14px; }
+.sbox { flex: 1; border-radius: var(--rs); padding: 12px 8px; text-align: center; background: var(--surface); border: 1.5px solid var(--border); cursor: pointer; }
+.snum { font-size: 22px; font-weight: 800; }
+.slbl { font-size: 10px; color: var(--muted); margin-top: 3px; font-weight: 600; }
+.asheet { margin: 10px 14px 14px; background: linear-gradient(140deg,#2563EB 0%,#1E3A8A 100%); border-radius: 20px; padding: 18px; box-shadow: 0 16px 48px rgba(37,99,235,.4); }
+.tgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.tbtn { border-radius: 14px; padding: 14px 10px; text-align: center; background: rgba(255,255,255,.14); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; border: 2px solid transparent; transition: all .15s; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.tbtn svg { width: 24px; height: 24px; fill: none; stroke: rgba(255,255,255,.8); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: stroke .15s; }
+.tbtn.on { background: #fff; color: var(--blue); }
+.tbtn.on svg { stroke: var(--blue); }
+.tbtn:active { transform: scale(.94); }
+.sfl { font-size: 10px; color: rgba(255,255,255,.7); margin-bottom: 4px; font-weight: 700; }
+.sfi { background: #fff; border-radius: 10px; padding: 11px 12px; font-size: 15px; font-weight: 700; color: var(--ink); width: 100%; border: none; outline: none; font-family: inherit; }
+.sbtn { background: #fff; color: var(--blue); border-radius: 12px; padding: 14px; text-align: center; font-size: 14px; font-weight: 800; cursor: pointer; border: none; width: 100%; font-family: inherit; }
+.sbtn:active { transform: scale(.97); opacity: .9; }
+.mnav { display: flex; align-items: center; gap: 8px; padding: 0 14px 14px; }
+.mnav-btn { width: 40px; height: 40px; border-radius: 10px; background: var(--surface); border: 1.5px solid var(--border); cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: inherit; transition: all .15s; }
+.mnav-btn:active { background: var(--paper); transform: scale(.92); }
+.mdisp { flex: 1; background: var(--blue); color: #fff; border-radius: var(--rs); padding: 11px; text-align: center; font-size: 16px; font-weight: 800; }
+.prow { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-bottom: 1px solid var(--border); }
+.prow:last-child { border-bottom: none; }
+.prog-wrap { padding: 0 14px 12px; }
+.prog-head { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.prog-track { height: 7px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+.msum { display: flex; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r); margin: 0 14px 12px; overflow: hidden; }
+.msum-item { flex: 1; padding: 12px 6px; text-align: center; }
+.msum-item + .msum-item { border-right: 1px solid var(--border); }
+.msum-val { font-size: 17px; font-weight: 800; }
+.msum-lbl { font-size: 9px; color: var(--muted); font-weight: 600; margin-top: 3px; }
+.pay-toggle { flex-shrink: 0; border: none; cursor: pointer; font-family: inherit; padding: 9px 14px; border-radius: 20px; font-size: 12px; font-weight: 800; transition: all .2s; }
+.pay-toggle:active { transform: scale(.92); }
+.pt-paid    { background: var(--green-lt);  color: var(--green); }
+.pt-unpaid  { background: var(--blue-lt);   color: var(--blue);  }
+.pt-late    { background: var(--red-lt);    color: var(--red);   }
+.pt-advance { background: var(--purple-lt); color: var(--purple);}
+.overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); z-index: 200; display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity .3s; }
+.overlay.open { opacity: 1; pointer-events: all; }
+.msheet { background: var(--surface); border-radius: 24px 24px 0 0; width: 100%; padding: 20px 20px 34px; transform: translateY(100%); transition: transform .35s cubic-bezier(.4,0,.2,1); max-height: 88%; overflow-y: auto; }
+.overlay.open .msheet { transform: translateY(0); }
+.mhandle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+.mtitle { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+.rep-card { margin: 0 14px 14px; background: var(--blue); color: #fff; border-radius: 18px; padding: 20px; }
+.rep-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.15); }
+.rep-row:last-child { border-bottom: none; }
+.rep-lbl { font-size: 13px; color: rgba(255,255,255,.8); }
+.rep-val { font-size: 15px; font-weight: 800; }
+.maint-row { padding: 13px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.maint-row:last-child { border-bottom: none; }
+.maint-row:active { background: var(--paper); }
+.back-row { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; cursor: pointer; }
+.toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--ink); color: #fff; padding: 11px 22px; border-radius: 30px; font-size: 14px; font-weight: 700; box-shadow: 0 8px 30px rgba(0,0,0,.35); opacity: 0; transition: all .28s; white-space: nowrap; z-index: 9999; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 600px) {
+  body { background: var(--paper); align-items: flex-start; overscroll-behavior: none; }
+  .shell { width: 100%; height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+  .island { display: none; }
+  .screen { border-radius: 0; height: 100dvh; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="island"></div>
+  <div class="screen" id="app">
+
+    <!-- ════════════════ HOME ════════════════ -->
+    <div class="view" id="v-home" style="background:var(--surface);">
+      <div class="sbar">
+        <span>9:41</span>
+        <div class="sbar-icons">
+          <!-- Signal -->
+          <svg width="16" height="14" viewBox="0 0 16 14" fill="none"><rect x="0" y="8" width="3" height="6" rx="1" fill="#374151"/><rect x="4.5" y="5" width="3" height="9" rx="1" fill="#374151"/><rect x="9" y="2" width="3" height="12" rx="1" fill="#374151"/><rect x="13.5" y="0" width="2.5" height="14" rx="1" fill="#374151"/></svg>
+          <!-- Battery -->
+          <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="0.5" y="0.5" width="18" height="11" rx="3" stroke="#374151" stroke-width="1.3"/><rect x="2" y="2" width="13" height="8" rx="1.5" fill="#374151"/><path d="M19.5 4v4a1.5 1.5 0 0 0 0-4z" fill="#374151"/></svg>
+        </div>
+      </div>
+      <div class="tbar">
+        <div>
+          <div style="font-size:12px;color:var(--muted);">صباح الخير، أحمد 👋</div>
+          <div class="ttitle">لوحة التحكم</div>
+        </div>
+        <div style="width:38px;height:38px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;">أ</div>
+      </div>
+
+      <div class="hero" id="home-hero"></div>
+      <div class="srow" id="home-stats"></div>
+
+      <div class="sec-h">
+        <div class="sec-ht">العقارات</div>
+        <div class="sec-hl" onclick="go('properties')">الكل</div>
+      </div>
+      <div class="card" style="margin:0 14px 14px;" id="home-prop-list"></div>
+
+      <div style="padding:0 14px 6px;">
+        <button class="btn btn-blue" style="width:100%;gap:8px;" onclick="go('payments')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          تحصيل الشهر
+        </button>
+      </div>
+      <div style="padding:4px 14px;">
+        <button class="btn btn-ghost" style="width:100%;gap:8px;" onclick="go('maintenance')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          الصيانة
+        </button>
+      </div>
+      <div style="height:14px;"></div>
+    </div>
+
+
+    <!-- ════════════════ PROPERTIES ════════════════ -->
+    <div class="view hidden" id="v-properties">
+      <div class="sbar"><span>9:41</span></div>
+      <div class="tbar">
+        <div class="ttitle">العقارات</div>
+        <button class="btn btn-sm" onclick="openModal('m-add-prop')">+ إضافة</button>
+      </div>
+      <div style="padding:0 14px 12px; position:relative;">
+        <svg style="position:absolute;right:26px;top:50%;transform:translateY(-50%);pointer-events:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="fi" style="padding-right:42px;" placeholder="ابحث..." id="prop-q" oninput="renderProps()">
+      </div>
+      <div id="props-list"></div>
+    </div>
+
+
+    <!-- ════════════════ PROPERTY DETAIL ════════════════ -->
+    <div class="view hidden from-right" id="v-prop-detail">
+      <div class="sbar"><span>9:41</span></div>
+      <div id="prop-detail-body"></div>
+    </div>
+
+
+    <!-- ════════════════ PAYMENTS ════════════════ -->
+    <div class="view hidden" id="v-payments">
+      <div class="sbar"><span>9:41</span></div>
+      <div class="tbar">
+        <div class="ttitle">التحصيل</div>
+        <div style="font-size:11px;color:var(--muted);">اضغط لتسجيل الدفعة</div>
+      </div>
+
+      <div class="mnav">
+        <button class="mnav-btn" onclick="shiftMonth(-1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <div class="mdisp" id="pay-month-lbl">—</div>
+        <button class="mnav-btn" onclick="shiftMonth(1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+
+      <div style="padding:0 14px 10px;">
+        <select class="fi" id="pay-prop-sel" onchange="renderPayments()" style="cursor:pointer;"></select>
+      </div>
+
+      <div class="msum" id="pay-summary"></div>
+
+      <div class="prog-wrap">
+        <div class="prog-head">
+          <span id="prog-txt">—</span>
+          <span id="prog-pct" style="color:var(--green);font-weight:800;">—</span>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="prog-fill" style="background:var(--green);width:0%;"></div></div>
+      </div>
+
+      <div style="display:flex;gap:6px;padding:0 14px 12px;overflow-x:auto;" id="pay-tabs">
+        <button class="ftab on" onclick="setPayFilter('all',this)">الكل</button>
+        <button class="ftab" onclick="setPayFilter('unpaid',this)">لم يُدفع</button>
+        <button class="ftab" onclick="setPayFilter('paid',this)">مدفوع</button>
+        <button class="ftab" onclick="setPayFilter('late',this)">متأخر</button>
+        <button class="ftab" onclick="setPayFilter('advance',this)">مقدّم</button>
+      </div>
+
+      <div class="card" style="margin:0 14px 12px;" id="pay-list"></div>
+
+      <div style="padding:0 14px;">
+        <button class="btn btn-green" style="width:100%;gap:8px;" onclick="toast('تم حفظ التحصيل')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          حفظ التحصيل
+        </button>
+      </div>
+      <div style="height:12px;"></div>
+    </div>
+
+
+    <!-- ════════════════ MAINTENANCE ════════════════ -->
+    <div class="view hidden" id="v-maintenance">
+      <div class="sbar"><span>9:41</span></div>
+      <div class="tbar">
+        <div class="ttitle">الصيانة</div>
+        <button class="btn btn-sm-amber btn" onclick="openAddMaintModal()">+ طلب</button>
+      </div>
+      <div class="srow" id="maint-stats"></div>
+      <div style="display:flex;gap:6px;padding:0 14px 12px;overflow-x:auto;">
+        <button class="ftab on" onclick="setMaintFilter('all',this)">الكل</button>
+        <button class="ftab" onclick="setMaintFilter('open',this)">مفتوح</button>
+        <button class="ftab" onclick="setMaintFilter('progress',this)">جارٍ</button>
+        <button class="ftab" onclick="setMaintFilter('done',this)">مغلق</button>
+      </div>
+      <div class="card" style="margin:0 14px;" id="maint-list"></div>
+    </div>
+
+
+    <!-- ════════════════ REPORTS ════════════════ -->
+    <div class="view hidden" id="v-reports">
+      <div class="sbar"><span>9:41</span></div>
+      <div class="tbar">
+        <div class="ttitle">التقارير</div>
+        <button class="btn btn-sm" onclick="shareReport()" style="display:flex;align-items:center;gap:5px;font-size:13px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          مشاركة
+        </button>
+      </div>
+      <div class="mnav">
+        <button class="mnav-btn" onclick="shiftRepMonth(-1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <div class="mdisp" id="rep-month-lbl">—</div>
+        <button class="mnav-btn" onclick="shiftRepMonth(1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+      <div class="rep-card" id="rep-summary"></div>
+      <div class="sec-h"><div class="sec-ht">تقرير كل عقار</div></div>
+      <div id="rep-props" style="padding:0 14px;display:flex;flex-direction:column;gap:16px;padding-bottom:4px;"></div>
+      <div style="padding:12px 14px 6px;">
+        <button class="btn btn-blue" style="width:100%;gap:8px;font-size:14px;" onclick="shareReport()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          مشاركة تقرير PDF
+        </button>
+      </div>
+      <div style="height:8px;"></div>
+    </div>
+
+
+    <!-- ════════════════ REPORT PREVIEW ════════════════ -->
+    <div class="view hidden from-right" id="v-report-preview" style="padding-bottom:0;z-index:150;">
+      <!-- Sticky top bar -->
+      <div style="position:sticky;top:0;z-index:200;background:var(--blue);padding:12px 16px;display:flex;align-items:center;gap:10px;">
+        <button onclick="document.getElementById('v-report-preview').classList.add('hidden')"
+          style="width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.2);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div style="flex:1;color:#fff;font-size:15px;font-weight:800;">معاينة التقرير</div>
+        <button onclick="printReport()"
+          style="background:#fff;color:var(--blue);border:none;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          طباعة / PDF
+        </button>
+      </div>
+      <!-- Report content rendered here -->
+      <div id="report-preview-content" style="padding:0;"></div>
+    </div>
+
+    <!-- ════ NAV BAR ════ -->
+    <nav class="nav">
+      <!-- الرئيسية -->
+      <button class="nb on" id="nb-home" onclick="go('home')">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <div class="nb-label">الرئيسية</div>
+      </button>
+      <!-- العقارات -->
+      <button class="nb" id="nb-properties" onclick="go('properties')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        <div class="nb-label">العقارات</div>
+      </button>
+      <!-- التحصيل -->
+      <button class="nb" id="nb-payments" onclick="go('payments')">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <div class="nb-label">التحصيل</div>
+      </button>
+      <!-- الصيانة -->
+      <button class="nb" id="nb-maintenance" onclick="go('maintenance')">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <div class="nb-label">الصيانة</div>
+      </button>
+      <!-- التقارير -->
+      <button class="nb" id="nb-reports" onclick="go('reports')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <div class="nb-label">التقارير</div>
+      </button>
+    </nav>
+
+
+    <!-- MODAL: ADD PROPERTY -->
+    <div class="overlay" id="m-add-prop" onclick="closeOverlay('m-add-prop',event)">
+      <div class="msheet">
+        <div class="mhandle"></div>
+        <div class="mtitle">إضافة عقار</div>
+        <div class="fg"><div class="fl">اسم العقار</div><input class="fi" id="np-name" placeholder="مثال: مبنى الخوير"></div>
+        <div class="fg"><div class="fl">المالك</div><input class="fi" id="np-owner" placeholder="اسم المالك"></div>
+        <div class="fg" style="margin-bottom:20px;"><div class="fl">الموقع</div><input class="fi" id="np-loc" placeholder="المدينة، الحي"></div>
+        <button class="btn btn-blue" style="width:100%;" onclick="addProperty()">حفظ</button>
+      </div>
+    </div>
+
+    <!-- MODAL: PAYMENT ENTRY -->
+    <div class="overlay" id="m-pay-entry" onclick="closeOverlay('m-pay-entry',event)">
+      <div class="msheet">
+        <div class="mhandle"></div>
+        <div id="m-pay-unit-header" style="background:var(--paper);border-radius:var(--rs);padding:12px;margin-bottom:16px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div>
+            <div class="fl">الحالة</div>
+            <div style="display:flex;flex-direction:column;gap:6px;" id="m-pay-status-btns"></div>
+          </div>
+          <div>
+            <div class="fl">المبلغ (ريال)</div>
+            <input class="fi" id="m-pay-amount" type="number" style="font-size:18px;font-weight:800;">
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:20px;">
+          <div class="fl">ملاحظة</div>
+          <input class="fi" id="m-pay-note" placeholder="اختياري...">
+        </div>
+        <button class="btn btn-green" style="width:100%;font-size:15px;" onclick="savePayEntry()">حفظ</button>
+      </div>
+    </div>
+
+    <!-- MODAL: ADD MAINTENANCE -->
+    <div class="overlay" id="m-add-maint" onclick="closeOverlay('m-add-maint',event)">
+      <div class="msheet">
+        <div class="mhandle"></div>
+        <div class="mtitle" style="display:flex;align-items:center;gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          طلب صيانة
+        </div>
+        <div class="fg"><div class="fl">الوحدة</div><select class="fi" id="maint-unit-sel" style="cursor:pointer;"><option value="">اختر...</option></select></div>
+        <div class="fg">
+          <div class="fl">نوع المشكلة</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="maint-type-grp">
+            <button class="chip on" data-v="كهرباء" onclick="chipSel(this,'maint-type-grp')">كهرباء</button>
+            <button class="chip" data-v="سباكة" onclick="chipSel(this,'maint-type-grp')">سباكة</button>
+            <button class="chip" data-v="تكييف" onclick="chipSel(this,'maint-type-grp')">تكييف</button>
+            <button class="chip" data-v="أخرى" onclick="chipSel(this,'maint-type-grp')">أخرى</button>
+          </div>
+        </div>
+        <div class="fg"><div class="fl">الوصف</div><input class="fi" id="maint-desc" placeholder="وصف مختصر..."></div>
+        <div class="fg" style="margin-bottom:20px;"><div class="fl">التكلفة (ريال)</div><input class="fi" id="maint-cost" type="number" placeholder="0"></div>
+        <button class="btn btn-blue" style="width:100%;background:var(--amber);" onclick="addMaint()">رفع الطلب</button>
+      </div>
+    </div>
+
+    <!-- MODAL: EDIT UNIT -->
+    <div class="overlay" id="m-edit-unit" onclick="closeOverlay('m-edit-unit',event)">
+      <div class="msheet">
+        <div class="mhandle"></div>
+        <div class="mtitle" style="display:flex;align-items:center;gap:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          تعديل الوحدة
+        </div>
+
+        <!-- Unit type selector -->
+        <div class="fg">
+          <div class="fl">نوع الوحدة</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;" id="edit-type-grp">
+            <button class="chip" data-t="apt"    onclick="editSelType(this)">شقة</button>
+            <button class="chip" data-t="villa"  onclick="editSelType(this)">فيلا</button>
+            <button class="chip" data-t="shop"   onclick="editSelType(this)">محل</button>
+            <button class="chip" data-t="office" onclick="editSelType(this)">مكتب</button>
+          </div>
+        </div>
+
+        <div class="fg">
+          <div class="fl">رقم / اسم الوحدة</div>
+          <input class="fi" id="edit-unit-num" placeholder="مثال: شقة 3">
+        </div>
+
+        <div class="fg">
+          <div class="fl">الإيجار الشهري (ريال)</div>
+          <input class="fi" id="edit-unit-rent" type="number" placeholder="0">
+        </div>
+
+        <!-- Status toggle -->
+        <div class="fg" style="margin-bottom:20px;">
+          <div class="fl">حالة الوحدة</div>
+          <div style="display:flex;gap:10px;margin-top:6px;">
+            <button id="edit-st-rented" onclick="editSelSt('rented')" style="flex:1;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;border:2px solid var(--green);background:var(--green-lt);color:var(--green);font-family:inherit;transition:all .15s;">
+              مؤجرة
+            </button>
+            <button id="edit-st-vacant" onclick="editSelSt('vacant')" style="flex:1;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;border:2px solid var(--border);background:var(--surface);color:var(--muted);font-family:inherit;transition:all .15s;">
+              فاضية
+            </button>
+          </div>
+        </div>
+
+        <button class="btn btn-blue" style="width:100%;font-size:15px;" onclick="saveEditUnit()">حفظ التعديلات</button>
+      </div>
+    </div>
+
+    <!-- MODAL: QUICK LIST -->
+    <div class="overlay" id="m-quicklist" onclick="closeOverlay('m-quicklist',event)">
+      <div class="msheet">
+        <div class="mhandle"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="mtitle" id="m-quicklist-title" style="margin-bottom:0;"></div>
+          <button onclick="printQuickList()" style="display:flex;align-items:center;gap:5px;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            طباعة PDF
+          </button>
+        </div>
+        <div id="m-quicklist-body"></div>
+      </div>
+    </div>
+
+    <!-- MODAL: EDIT MAINTENANCE -->
+    <div class="overlay" id="m-edit-maint" onclick="closeOverlay('m-edit-maint',event)">
+      <div class="msheet">
+        <div class="mhandle"></div>
+        <div class="mtitle" style="display:flex;align-items:center;gap:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          تعديل طلب الصيانة
+        </div>
+        <div class="fg">
+          <div class="fl">نوع المشكلة</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="edit-maint-type-grp">
+            <button class="chip" data-v="كهرباء" onclick="chipSel(this,'edit-maint-type-grp')">كهرباء</button>
+            <button class="chip" data-v="سباكة" onclick="chipSel(this,'edit-maint-type-grp')">سباكة</button>
+            <button class="chip" data-v="تكييف" onclick="chipSel(this,'edit-maint-type-grp')">تكييف</button>
+            <button class="chip" data-v="أخرى" onclick="chipSel(this,'edit-maint-type-grp')">أخرى</button>
+          </div>
+        </div>
+        <div class="fg"><div class="fl">الوصف</div><input class="fi" id="edit-maint-desc" placeholder="وصف مختصر..."></div>
+        <div class="fg">
+          <div class="fl">الحالة</div>
+          <div style="display:flex;gap:8px;" id="edit-maint-st-grp">
+            <button class="chip" data-v="open" onclick="chipSel(this,'edit-maint-st-grp')">مفتوح</button>
+            <button class="chip" data-v="progress" onclick="chipSel(this,'edit-maint-st-grp')">جارٍ</button>
+            <button class="chip" data-v="done" onclick="chipSel(this,'edit-maint-st-grp')">مغلق</button>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:20px;"><div class="fl">التكلفة (ريال)</div><input class="fi" id="edit-maint-cost" type="number" placeholder="0"></div>
+        <button class="btn btn-blue" style="width:100%;font-size:15px;" onclick="saveEditMaint()">حفظ التعديلات</button>
+      </div>
+    </div>
+
+    <!-- MODAL: CONFIRM DELETE -->
+    <div class="overlay" id="m-confirm" onclick="closeOverlay('m-confirm',event)">
+      <div class="msheet" style="padding-bottom:30px;">
+        <div class="mhandle"></div>
+        <div style="text-align:center;margin-bottom:14px;">
+          <div style="width:52px;height:52px;background:var(--red-lt);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </div>
+          <div id="m-confirm-title" style="font-size:18px;font-weight:800;margin-bottom:8px;"></div>
+          <div id="m-confirm-body" style="font-size:14px;color:var(--muted);line-height:1.5;"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button onclick="closeModal('m-confirm')" style="flex:1;padding:13px;border-radius:var(--rs);border:1.5px solid var(--border);background:var(--surface);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">إلغاء</button>
+          <button id="m-confirm-ok" style="flex:1;padding:13px;border-radius:var(--rs);border:none;background:var(--red);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">حذف</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toastEl"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// SVG ICONS — outline, رصاصي داكن
+// ══════════════════════════════════════════════
+const SVG = {
+  // Unit type icons
+  apt: `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9M15 21V9"/></svg>`,
+  villa: `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+  shop: `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  office: `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9M9 3v6M15 21V9"/></svg>`,
+
+  // Nav & UI icons
+  check: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  arrow_left: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  arrow_right: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+
+  // Maintenance type icons
+  elec: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  pipe: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12M12 12C12 7 17 4 17 4"/><path d="M7 8c0 4 5 4 5 8"/><circle cx="12" cy="22" r="0" fill="var(--icon)"/></svg>`,
+  ac: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="10" rx="2"/><line x1="2" y1="19" x2="22" y2="19"/><path d="M7 19v2M12 19v2M17 19v2"/></svg>`,
+  wrench: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+};
+
+const MAINT_ICO = { كهرباء: SVG.elec, سباكة: SVG.pipe, تكييف: SVG.ac, أخرى: SVG.wrench };
+
+// Unit type metadata
+const TM = {
+  apt:    { l:'شقة',  uicls:'ui-apt',    svg: SVG.apt    },
+  villa:  { l:'فيلا', uicls:'ui-villa',  svg: SVG.villa  },
+  shop:   { l:'محل',  uicls:'ui-shop',   svg: SVG.shop   },
+  office: { l:'مكتب', uicls:'ui-office', svg: SVG.office },
+};
+function tm(t){ return TM[t]||TM.apt; }
+
+// Unit icon HTML helper
+function unitIco(type, size=42){
+  const m=tm(type);
+  return `<div class="unit-ico ${m.uicls}" style="width:${size}px;height:${size}px;border-radius:${size>36?12:10}px;">${m.svg}</div>`;
+}
+
+// ══════════════════════════════════════════════
+// DATE / MONTH HELPERS
+// ══════════════════════════════════════════════
+const MONTHS_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const now=new Date();
+function mk(y,m){return`${y}-${String(m).padStart(2,'0')}`;}
+function mkNow(){return mk(now.getFullYear(),now.getMonth()+1);}
+function parseMk(k){const[y,m]=k.split('-');return{y:+y,m:+m};}
+function fmtMk(k){const{y,m}=parseMk(k);return`${MONTHS_AR[m-1]} ${y}`;}
+function prevMk(k){let{y,m}=parseMk(k);m--;if(m<1){m=12;y--;}return mk(y,m);}
+function nextMk(k){let{y,m}=parseMk(k);m++;if(m>12){m=1;y++;}return mk(y,m);}
+function fmt(n){return(+n||0).toLocaleString('ar-SA')+' ريال';}
+
+// ══════════════════════════════════════════════
+// DATABASE
+// ══════════════════════════════════════════════
+const DB={
+  props:[],
+  units:[],
+  payments:{},
+  maint:[],
+  nid:{prop:1,unit:1,maint:1},
+  curMonth:mkNow(), repMonth:mkNow(),
+  payFilter:'all', maintFilter:'all',
+  activeProp:null, editPayUnit:null, editPayMonth:null,
+};
+
+// Payments loaded from Supabase on init
+function seedPay(){} // kept for compatibility
+
+// ══════════════════════════════════════════════
+// PAYMENT STATUS
+// ══════════════════════════════════════════════
+function payStatus(unit,monthKey){
+  if(unit.st==='vacant') return 'vacant';
+  const rec=DB.payments[unit.id]?.[monthKey];
+  if(!rec){
+    const{y,m}=parseMk(monthKey);
+    if(new Date(y,m,0)<new Date()) return 'late';
+    return 'unpaid';
+  }
+  const{y,m}=parseMk(monthKey);
+  if(new Date(rec.paidAt)<new Date(y,m-1,1)) return 'advance';
+  return 'paid';
+}
+
+const STATUS_META={
+  paid:    {label:'مدفوع',    style:'background:var(--green-lt);color:var(--green)'},
+  advance: {label:'مقدّم',    style:'background:var(--purple-lt);color:var(--purple)'},
+  late:    {label:'متأخر',   style:'background:var(--red-lt);color:var(--red)'},
+  unpaid:  {label:'لم يُدفع', style:'background:var(--blue-lt);color:var(--blue)'},
+  vacant:  {label:'فاضية',   style:'background:#F1F5F9;color:var(--muted)'},
+};
+
+// ══════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════
+const TABS=['home','properties','payments','maintenance','reports'];
+function go(tab){
+  document.getElementById('v-prop-detail').classList.add('hidden');
+  TABS.forEach(t=>{
+    document.getElementById('v-'+t).classList.add('hidden');
+    const nb=document.getElementById('nb-'+t);
+    if(nb) nb.classList.remove('on');
+  });
+  document.getElementById('v-'+tab).classList.remove('hidden');
+  const nb=document.getElementById('nb-'+tab);
+  if(nb) nb.classList.add('on');
+  if(tab==='home')        renderHome();
+  if(tab==='properties')  renderProps();
+  if(tab==='payments')    renderPayments();
+  if(tab==='maintenance') renderMaint();
+  if(tab==='reports')     renderReports();
+}
+function openPropDetail(pid){
+  DB.activeProp=pid;
+  renderPropDetail(pid);
+  document.getElementById('v-prop-detail').classList.remove('hidden');
+}
+function closePropDetail(){ document.getElementById('v-prop-detail').classList.add('hidden'); }
+
+// ══════════════════════════════════════════════
+// HOME
+// ══════════════════════════════════════════════
+function renderHome(){
+  const mk2=DB.curMonth;
+  const ru=DB.units.filter(u=>u.st==='rented');
+  let total=0,paid=0,late=0,advance=0,unpaid=0;
+  ru.forEach(u=>{
+    const s=payStatus(u,mk2),rec=DB.payments[u.id]?.[mk2];
+    if(s==='paid')   {paid++;   total+=rec?.amount||0;}
+    if(s==='advance'){advance++;total+=rec?.amount||0;}
+    if(s==='late')   late++;
+    if(s==='unpaid') unpaid++;
+  });
+  const comm=Math.round(total*.05);
+  const totalRented=ru.length;
+  const totalProps=DB.props.length;
+  const unpaidUnits=DB.units.filter(u=>u.st==='rented'&&['late','unpaid'].includes(payStatus(u,mk2)));
+  const vacantUnits=DB.units.filter(u=>u.st==='vacant');
+
+  // Hero card (blue)
+  document.getElementById('home-hero').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+      <div style="font-size:11px;color:rgba(255,255,255,.75);">الشهر الحالي</div>
+      <div style="font-size:12px;font-weight:800;color:#fff;">${fmtMk(mk2)}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;">
+      <div>
+        <div style="font-size:11px;color:rgba(255,255,255,.75);margin-bottom:4px;">إجمالي التحصيل</div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:-1px;">${(+total||0).toLocaleString('ar-SA')} ر</div>
+      </div>
+      <div style="text-align:left;">
+        <div style="font-size:11px;color:rgba(255,255,255,.75);margin-bottom:4px;">عمولتي 5%</div>
+        <div style="font-size:20px;font-weight:800;color:#FBBF24;">${(+comm||0).toLocaleString('ar-SA')} ر</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;border-top:1px solid rgba(255,255,255,.2);padding-top:12px;">
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:18px;font-weight:800;">${late+unpaid}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.75);margin-top:2px;">متأخرة</div>
+      </div>
+      <div style="width:1px;background:rgba(255,255,255,.2);"></div>
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:18px;font-weight:800;">${totalRented}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.75);margin-top:2px;">وحدة مؤجرة</div>
+      </div>
+      <div style="width:1px;background:rgba(255,255,255,.2);"></div>
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:18px;font-weight:800;">${totalProps}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.75);margin-top:2px;">عقار</div>
+      </div>
+    </div>`;
+
+  // Stats row — 3 clickable cards matching reference image
+  document.getElementById('home-stats').innerHTML=`
+    <div class="sbox" onclick="showQuickList('unpaid')" style="border-color:var(--red-lt);">
+      <div class="snum" style="color:var(--red);">${unpaidUnits.length}</div>
+      <div class="slbl">غير مدفوعة</div>
+    </div>
+    <div class="sbox" onclick="showQuickList('vacant')" style="border-color:var(--amber-lt);">
+      <div class="snum" style="color:var(--amber);">${vacantUnits.length}</div>
+      <div class="slbl">غير مؤجرة</div>
+    </div>
+    <div class="sbox" onclick="go('properties')" style="border-color:var(--blue-lt);">
+      <div class="snum" style="color:var(--blue);">${totalProps}</div>
+      <div class="slbl">عقار</div>
+    </div>`;
+
+  // Property list — reference image style
+  document.getElementById('home-prop-list').innerHTML=DB.props.map(p=>{
+    const units=DB.units.filter(u=>u.pid===p.id);
+    const rented=units.filter(u=>u.st==='rented');
+    const lateC=rented.filter(u=>['late','unpaid'].includes(payStatus(u,mk2))).length;
+    const collectedAmt=rented.reduce((s,u)=>{
+      const rec=DB.payments[u.id]?.[mk2];
+      return ['paid','advance'].includes(payStatus(u,mk2))?s+(rec?.amount||0):s;
+    },0);
+    const types=[...new Set(units.map(u=>u.type))];
+    const icoStack=types.slice(0,2).map(t=>`<div class="unit-ico ${tm(t).uicls}" style="width:34px;height:34px;border-radius:9px;">${tm(t).svg}</div>`).join('');
+    const statusTag=lateC>0
+      ?`<span class="stag" style="background:var(--red-lt);color:var(--red);">${lateC} متأخرة</span>`
+      :`<span class="stag" style="background:var(--green-lt);color:var(--green);">مكتمل</span>`;
+    return `<div class="li" onclick="openPropDetail(${p.id})" style="padding:12px 14px;">
+      <div style="display:flex;gap:4px;">${icoStack}</div>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;">${p.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${rented.length} وحدة · ${p.loc}</div>
+      </div>
+      <div style="text-align:left;">
+        <div style="font-size:13px;font-weight:800;color:var(--green);">${collectedAmt.toLocaleString('ar-SA')} ر</div>
+        <div style="margin-top:3px;">${statusTag}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Quick list modal popup
+function showQuickList(type){
+  const mk2=DB.curMonth;
+  let units,title,emptyMsg;
+  if(type==='unpaid'){
+    units=DB.units.filter(u=>u.st==='rented'&&['late','unpaid'].includes(payStatus(u,mk2)));
+    title='الوحدات غير المدفوعة';
+    emptyMsg='كل الوحدات مدفوعة';
+  } else {
+    units=DB.units.filter(u=>u.st==='vacant');
+    title='الوحدات غير المؤجرة';
+    emptyMsg='لا توجد وحدات فاضية';
+  }
+  document.getElementById('m-quicklist-title').textContent=title;
+  document.getElementById('m-quicklist-body').innerHTML=units.length
+    ?units.map(u=>{
+        const p=DB.props.find(x=>x.id===u.pid);
+        const s=type==='unpaid'?payStatus(u,mk2):'vacant';
+        const tagMap={
+          late:   {label:'متأخر',   bg:'var(--red-lt)',    c:'var(--red)'},
+          unpaid: {label:'لم يُدفع',bg:'var(--blue-lt)',   c:'var(--blue)'},
+          vacant: {label:'فاضية',   bg:'var(--paper)',     c:'var(--muted)'},
+        };
+        const sm=tagMap[s]||tagMap.vacant;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);" onclick="${type==='unpaid'?`go('payments')`:`openPropDetail(${u.pid})`};closeModal('m-quicklist');">
+          ${unitIco(u.type,38)}
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;">${u.num}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${p?.name||''}</div>
+          </div>
+          <div style="text-align:left;">
+            <span class="stag" style="background:${sm.bg};color:${sm.c};">${sm.label}</span>
+            <div style="font-size:12px;font-weight:800;margin-top:3px;color:var(--ink);">${u.st==='vacant'?'—':fmt(u.rent)}</div>
+          </div>
+        </div>`;
+      }).join('')
+    :`<div style="padding:30px;text-align:center;color:var(--muted);">${emptyMsg}</div>`;
+  window._qlType=type;
+  openModal('m-quicklist');
+}
+
+function printQuickList(){
+  const mk2=DB.curMonth;
+  const title=document.getElementById('m-quicklist-title').textContent;
+  const rows=document.getElementById('m-quicklist-body').querySelectorAll('[style*="border-bottom"]');
+  const typeMap={apt:'شقة',villa:'فيلا',shop:'محل',office:'مكتب'};
+
+  // Rebuild data from DOM context (_qlType set in showQuickList)
+  const isUnpaid=window._qlType==='unpaid';
+  const units=isUnpaid
+    ?DB.units.filter(u=>u.st==='rented'&&['late','unpaid'].includes(payStatus(u,mk2)))
+    :DB.units.filter(u=>u.st==='vacant');
+
+  const rowsHtml=units.map(u=>{
+    const p=DB.props.find(x=>x.id===u.pid);
+    const s=isUnpaid?payStatus(u,mk2):'vacant';
+    const stLabel={late:'متأخر',unpaid:'لم يُدفع',vacant:'فاضية'}[s]||s;
+    const stColor={late:'#DC2626',unpaid:'#2563EB',vacant:'#94A3B8'}[s]||'#94A3B8';
+    const amt=u.st==='vacant'?'—':fmt(u.rent);
+    return `<tr>
+      <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;font-size:13px;font-weight:700;">${u.num}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#64748B;">${typeMap[u.type]||u.type}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#64748B;">${p?.name||'—'}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:700;color:${stColor};">${stLabel}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;font-size:13px;font-weight:800;text-align:left;">${amt}</td>
+    </tr>`;
+  }).join('');
+
+  const html=`
+
+</body>
+</html>
