@@ -533,6 +533,16 @@ svg.ico-lg { width: 24px; height: 24px; }
           </div>
         </div>
 
+        <!-- Tenant info -->
+        <div class="fg" id="edit-tenant-wrap">
+          <div class="fl">اسم المستأجر</div>
+          <input class="fi" id="edit-unit-tenant" placeholder="اسم المستأجر">
+        </div>
+        <div class="fg" style="margin-bottom:20px;">
+          <div class="fl" style="display:flex;justify-content:space-between;"><span>رقم الجوال</span><span style="font-weight:400;letter-spacing:0;">اختياري</span></div>
+          <input class="fi" id="edit-unit-phone" type="tel" placeholder="05xxxxxxxx">
+        </div>
+
         <button class="btn btn-blue" style="width:100%;font-size:15px;" onclick="saveEditUnit()">حفظ التعديلات</button>
       </div>
     </div>
@@ -1094,6 +1104,10 @@ function renderPropDetail(pid){
         <button id="st-rented" onclick="selS('rented')" style="flex:1;border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;border:none;font-family:inherit;background:#34D399;color:#fff;transition:all .15s;">مؤجرة</button>
         <button id="st-vacant" onclick="selS('vacant')" style="flex:1;border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;border:none;font-family:inherit;background:rgba(255,255,255,.15);color:#fff;transition:all .15s;">فاضية</button>
       </div>
+      <div id="tenant-fields" style="margin-bottom:12px;transition:opacity .2s;">
+        <div style="margin-bottom:10px;"><div class="sfl">اسم المستأجر</div><input class="sfi" id="unit-tenant" placeholder="اسم المستأجر"></div>
+        <div><div class="sfl" style="display:flex;justify-content:space-between;"><span>رقم الجوال</span><span style="opacity:.6;font-weight:400;">اختياري</span></div><input class="sfi" id="unit-phone" type="tel" placeholder="05xxxxxxxx"></div>
+      </div>
       <button class="sbtn" onclick="addUnit(${pid})">حفظ + إضافة أخرى</button>
     </div>
 
@@ -1113,6 +1127,7 @@ function renderDetailUnits(pid){
       ${unitIco(u.type, 40)}
       <div style="flex:1;">
         <div style="font-size:14px;font-weight:700;">${u.num}</div>
+        ${u.tenant?`<div style="font-size:12px;color:var(--ink);font-weight:600;margin-top:2px;">${u.tenant}${u.phone?' · '+u.phone:''}</div>`:''}
         <div style="margin-top:3px;"><span class="stag" style="${sm.style};">${sm.label}</span></div>
       </div>
       <div style="text-align:left;margin-left:8px;">
@@ -1158,6 +1173,12 @@ function openEditUnit(uid){
   // Fill fields
   document.getElementById('edit-unit-num').value=u.num;
   document.getElementById('edit-unit-rent').value=u.rent||'';
+  document.getElementById('edit-unit-tenant').value=u.tenant||'';
+  document.getElementById('edit-unit-phone').value=u.phone||'';
+
+  // Show/hide tenant fields
+  const tw=document.getElementById('edit-tenant-wrap');
+  if(tw){ tw.style.display=u.st==='rented'?'':'none'; }
 
   // Type chips
   document.querySelectorAll('#edit-type-grp .chip').forEach(c=>{
@@ -1178,6 +1199,8 @@ function editSelType(btn){
 function editSelSt(s){
   _editSt=s;
   _refreshEditStBtns(s);
+  const tw=document.getElementById('edit-tenant-wrap');
+  if(tw){ tw.style.display=s==='rented'?'':'none'; }
 }
 
 function _refreshEditStBtns(s){
@@ -1202,7 +1225,10 @@ function saveEditUnit(){
 
   if(!newNum){ toast('أدخل رقم الوحدة'); return; }
 
-  u.num=newNum; u.rent=newRent; u.type=newType; u.st=_editSt;
+  const newTenant=document.getElementById('edit-unit-tenant').value.trim();
+  const newPhone=document.getElementById('edit-unit-phone').value.trim();
+  if(_editSt==='rented'&&!newTenant){ toast('أدخل اسم المستأجر'); return; }
+  u.num=newNum; u.rent=newRent; u.type=newType; u.st=_editSt; u.tenant=newTenant; u.phone=newPhone;
 
   closeModal('m-edit-unit');
   renderPropDetail(u.pid);
@@ -1225,15 +1251,23 @@ function selS(s){
   r.style.color=s==='rented'?'#fff':'rgba(255,255,255,.6)';
   v.style.background=s==='vacant'?'rgba(255,255,255,.85)':'rgba(255,255,255,.15)';
   v.style.color=s==='vacant'?'var(--ink)':'rgba(255,255,255,.6)';
+  const tf=document.getElementById('tenant-fields');
+  if(tf){ tf.style.opacity=s==='rented'?'1':'0.4'; tf.style.pointerEvents=s==='rented'?'all':'none'; }
 }
 function addUnit(pid){
   const numEl=document.getElementById('unit-num'),rentEl=document.getElementById('unit-rent');
+  const tenantEl=document.getElementById('unit-tenant'),phoneEl=document.getElementById('unit-phone');
   const num=numEl.value.trim()||numEl.placeholder;
   const rent=parseInt(rentEl.value)||0;
+  const tenant=tenantEl?tenantEl.value.trim():'';
+  const phone=phoneEl?phoneEl.value.trim():'';
   if(!num){toast('أدخل رقم الوحدة');return;}
-  DB.units.push({id:DB.nid.unit++,pid,type:selType,num,rent,st:selSt});
+  if(selSt==='rented'&&!tenant){toast('أدخل اسم المستأجر');return;}
+  DB.units.push({id:DB.nid.unit++,pid,type:selType,num,rent,st:selSt,tenant:tenant||'',phone:phone||''});
   const same=DB.units.filter(u=>u.pid===pid&&u.type===selType);
   numEl.value=''; numEl.placeholder=tm(selType).l+' '+same.length; rentEl.value='';
+  if(tenantEl) tenantEl.value='';
+  if(phoneEl) phoneEl.value='';
   document.getElementById('detail-units').innerHTML=renderDetailUnits(pid);
   toast('تمت إضافة '+num);
 }
